@@ -1,0 +1,894 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="fr">
+    <!--
+GeoBretagne dual viewer
+
+$Rev: 77 $
+$Date: 2012-07-23 12:29:19 +0200 (lun. 23 juil. 2012) $
+$Author: fabrice.phung $
+    -->
+    <head>
+        <title>Ecomusée</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=100" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+
+        <!-- libraries -->
+        <script type="text/javascript" src="dual/lib/openlayers/OpenLayers.js"></script>
+        <script type="text/javascript" src="dual/lib/proj4js/proj4js-compressed.js"></script>
+        <script type="text/javascript" src="dual/lib/LoadingPanel.js"></script>
+       
+        
+        <link rel="stylesheet" href="dual/style/ol.css" type="text/css" />
+
+        <script type="text/javascript">
+//<![CDATA[
+/***********************************************************************************************
+ * configuration
+ */
+    
+// libraries configuration
+var Ol = OpenLayers;
+Ol.DOTS_PER_INCH = 90.71428571428572;
+Ol.Util.onImageLoadErrorColor = 'transparent';
+Ol.ProxyHost = '/proxy/?url=';
+Proj4js.defs["EPSG:900913"] = "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs";
+Proj4js.defs["EPSG:2154"] = "+proj=lcc +lat_1=49 +lat_2=44 +lat_0=46.5 +lon_0=3 +x_0=700000 +y_0=6600000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs";
+Proj4js.defs["EPSG:4326"] = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs";
+
+// rough xml escape
+if (!String.prototype.encodeHTML) {
+    String.prototype.encodeHTML = function () {
+        "use strict";
+        return this.replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+  };
+}
+
+// string reverse
+String.prototype.reverse = function() {
+    "use strict";
+    var s = "";
+    for (var i=this.length-1;i>=0;i-=1) {
+        s += this.charAt(i);
+  }
+  return s;
+};
+
+
+/* Style layer Cache */
+var myStyles = new Ol.StyleMap({ 
+    "default": new Ol.Style({ 
+                strokeDashstyle: "dash",
+                fill:true,
+                fillColor: "#FFFFFF",                         
+                strokeColor: "#FFFFFF", 
+                strokeWidth: 1,
+                strokeOpacity: 0,
+                fillOpacity: 0.5, 
+                graphicZIndex: 1 
+            })
+       });
+  
+/* layer Cache */
+var myCacheGeojson =  {
+        styleMap: myStyles,      
+        projection: new OpenLayers.Projection("EPSG:4326"),
+        strategies: [new OpenLayers.Strategy.Fixed()],
+        protocol: new OpenLayers.Protocol.HTTP({
+            url: "./json/mycache.geojson",
+            format: new OpenLayers.Format.GeoJSON()
+        })
+    }; 
+
+/* Style layer Point of interest */
+var myStylesPointofInterest = new Ol.Style({
+        //'pointRadius': 5,
+        //fill:true,
+        //fillColor: "#FFFFFF",
+        //strokeColor: "#FFFFFF", 
+        //strokeWidth: 2,
+        label : "${nom}",                    
+        fontColor: "#000000",
+        fontSize: "12px",
+        fontFamily: "Courier New, monospace",
+        fontWeight: "bold",
+        labelXOffset: "${xOffset}",
+        labelYOffset: "${yOffset}",
+        labelOutlineColor: "white",
+        labelOutlineWidth: 3
+    });
+
+    
+/* layer Point of Interest */
+var myPointofInterestGeojson = {
+        styleMap: myStylesPointofInterest,      
+        projection: new OpenLayers.Projection("EPSG:4326"),
+        strategies: [new OpenLayers.Strategy.Fixed()],
+        minResolution: 0.001,
+        maxResolution: 10,
+        protocol: new OpenLayers.Protocol.HTTP({
+            url: "./json/mypointofinterest.geojson",
+            format: new OpenLayers.Format.GeoJSON()
+        })
+    };
+       
+// application hardcoded configuration
+var hardConfig = {
+    // initial extent and zoom, may be overriden with &x=lon&y=lat&z=zoom
+	//initialExtent: new Ol.Bounds(345353.75, 6784457, 356295.15625, 6793920.5),
+    initialExtent: new Ol.Bounds(337818, 6770694, 361558, 6799622),
+    //initialExtent: new Ol.Bounds(351965, 6789160, 351969, 6789164),
+    //center: [352305, 6789467],
+    center: [351967, 6789162],
+    zinit: 13,
+
+    // must match the TMS grid&scale if any
+	maxExtent: new Ol.Bounds(268348.8992121639, 6663180.829612164, 581434.9670682458, 6976266.8974682465),
+     
+           
+	//maxExtent: new Ol.Bounds(323381, 6768065, 378640, 6810612),
+	//maxExtent: new Ol.Bounds(345353.75, 6784457, 356295.15625, 6793920.5),
+    maxResolution: 156543.0339,
+
+    // map center restricted in this extent (a l'arrivee sur la carte)
+	restrictedExtent: new Ol.Bounds(337818, 6770694, 361558, 6799622),
+
+    // real extent of interest (polygon)
+    //coveredExtent: [
+    //    [209999,6810404],[226203,6809486],[237516,6806429],[249135,6811015],[282767,6798785],[297748,6803066],
+    //    [302335,6797562],[308755,6800314],[310590,6806123],[320680,6813767],[329852,6814684],[333827,6835781],
+    //    [325266,6836698],[316093,6848622],[328323,6859629],[346057,6860546],[349114,6850151],[367459,6849234],
+    //    [371434,6833029],[375714,6831195],[385498,6839144],[403537,6833641],[402620,6804900],[399868,6801537],
+    //    [403232,6770045],[393142,6768210],[383664,6746197],[369293,6751089],[357064,6746502],[349726,6740999],
+    //    [322514,6737024],[320068,6723571],[300194,6716539],[283378,6716539],[282767,6724183],[258613,6722043],
+     //   [255555,6716845],[263810,6707367],[259836,6704615],[246994,6708590],[244243,6701863],[224980,6705226],
+    //    [224980,6716539],[229872,6721431],[245466,6713482],[238128,6722960],[232930,6731521],[235376,6738247],
+    //    [224369,6747114],[219171,6739164],[207859,6745279],[212139,6752617],[206941,6768210],[211222,6774020],
+    //    [217031,6772797],[217031,6777994],[201438,6783498],[195629,6801843],[200826,6809181],[209999,6810404]
+    //],
+
+    // map projection
+    projMap: new Ol.Projection('EPSG:2154'),
+
+    // display projection
+    projDisplay: new Ol.Projection('EPSG:4326'),
+
+    // left compare layer
+    leftCompareLayer: new Ol.Layer.WMS(
+        "BD ORTHO Historique",
+        "https://tile.geobretagne.fr/gwc02/service/wms",
+        { layers: 'satellite-ancien', format: 'image/jpeg', transparent: false },
+        {
+            attribution: "IGN BDORTHO Historique",
+            isBaseLayer: false,
+            tileSize: new Ol.Size(256,256),
+            visibility: true
+        }
+    ),
+
+    // geocoder
+    openLSGeocodeUrl: function () {
+        "use strict";
+        var url = "https://geobretagne.fr/openls";
+        return url;
+    },
+    openLSMaxResponses: 1,
+
+    
+	rightCompareLayer: new Ol.Layer.WMS(
+        "Orthophoto 2014",
+        "https://public.sig.rennesmetropole.fr/geowebcache/service/wms?",  
+        //"https://public.sig.rennesmetropole.fr/geoserver/ows?service=WMS",
+        { layers: 'raster:ortho2014', format: 'image/png', transparent: false},
+        //"https://geobretagne.fr/geoserver/photo/ows?service=WMS",
+        //{ layers: 'ortho-35', format: 'image/png', transparent: false},
+        {
+            attributions: "Orthophotographie aérienne 2014 sur Rennes Métropole",
+            isBaseLayer: false,
+            tileSize: new Ol.Size(256,256),
+            visibility: true
+        }
+    ),
+   // https://geobretagne.fr/geoserver/photo/ows?service=WMS&request=GetLegendGraphic&format=image%2Fpng&width=20&height=20&layer=ortho-35
+
+    // left overlay layers array: shown on top of Left map
+    leftOverlay: [
+        new Ol.Layer.Vector("MyCacheGeojson Left", { 
+            projection: myCacheGeojson.projection,
+            styleMap: myCacheGeojson.styleMap,
+            strategies: [new OpenLayers.Strategy.Fixed()],
+            protocol: myCacheGeojson.protocol
+        }),
+        new Ol.Layer.Vector("myPointofInterestGeojson Left", { 
+            projection: myPointofInterestGeojson.projection,
+            styleMap: myPointofInterestGeojson.styleMap,
+            strategies: [new OpenLayers.Strategy.Fixed()],
+            minResolution: myPointofInterestGeojson.minResolution,
+            maxResolution: myPointofInterestGeojson.maxResolution,            
+            protocol: myPointofInterestGeojson.protocol
+        })
+    ],
+
+    // right overlay layers array: shown on top of Right map
+	rightOverlay: [
+        new Ol.Layer.Vector("MyCacheGeojson Right", { 
+            projection: myCacheGeojson.projection,
+            styleMap: myCacheGeojson.styleMap,
+            strategies: [new OpenLayers.Strategy.Fixed()],
+            protocol: myCacheGeojson.protocol
+        }),
+        new Ol.Layer.Vector("myPointofInterestGeojson Right", { 
+            projection: myPointofInterestGeojson.projection,
+            styleMap: myPointofInterestGeojson.styleMap,
+            strategies: [new OpenLayers.Strategy.Fixed()],
+            minResolution: myPointofInterestGeojson.minResolution,
+            maxResolution: myPointofInterestGeojson.maxResolution, 
+            protocol: myPointofInterestGeojson.protocol
+        })
+        
+//        new Ol.Layer.WMS(
+//            "Limites communales référentielles",
+//            "https://public.sig.rennesmetropole.fr/geoserver/ows?service=WMS",
+//            {
+//                srs: "EPSG:2154",
+//                layers:"ladm_terri:commune_emprise",
+//                format:"image/png",
+//                transparent: true
+//            },
+//            {
+//                singleTile: false,
+//                attribution: "Limites communales référentielles de Rennes Métropole",
+//                isBaseLayer: false,
+//                visibility: true
+//            }
+//        )
+    ]
+    
+    //vectorLayer: new Ol.Layer.Vector({
+    //source: new Ol.source.Vector({
+    //    format: new Ol.format.GeoJSON(),
+    //    url: "https://public-test.sig.rennesmetropole.fr/dual/json/layers_gray.json"
+    //    })
+    //});
+    
+
+
+};
+
+/**
+ * fin configuration application
+ ***********************************************************************************************
+ */
+
+
+
+function init() {
+    "use strict";
+    var config = {};
+    var mapLeft, markGeolocLeft, mapOptions, navHistory, panel, mapRight, markGeolocRight;
+    var btLayerOverlayFn, btLayerOverlay;
+    var helpFrame, aboutFrame, permalinkFrame;
+    var helpLink, aboutLink, permalinkLink, permalinkLink2, permaqr,setPermalink;
+
+    
+    /**
+     * Fetching parameters from url hash or querystring
+     */
+    Ol.Util.applyDefaults(config, Ol.Util.getParameters("?"+window.location.hash.substr(1)));
+    Ol.Util.applyDefaults(config, Ol.Util.getParameters(window.location.href));
+
+    /**
+     * Map common parameters
+     */
+    mapOptions={
+        projection: hardConfig.projMap,
+        displayProjection: hardConfig.projDisplay,
+        units: "m",
+        numZoomLevels: 21,
+        maxResolution: hardConfig.maxResolution,
+        maxExtent: hardConfig.maxExtent,
+        restrictedExtent: hardConfig.restrictedExtent,
+        controls: []
+    };
+    
+    /* GeoJson layer */   
+    
+              
+    
+       
+        
+
+    /**
+     * Left map
+     */
+    mapLeft = new Ol.Map('mapLeft',mapOptions);
+    mapLeft.addLayer(new Ol.Layer("fake", {isBaseLayer: true, displayInLayerSwitcher: false}));
+ 
+    mapLeft.addControls([
+        new Ol.Control.Navigation({
+            mouseWheelOptions: {
+                cumulative: false,
+                interval: 100
+            }
+        }),
+        new Ol.Control.ScaleLine(),
+        new Ol.Control.LoadingPanel()
+    ]);
+
+    // toolbar on the map
+    panel = new Ol.Control.Panel();
+    mapLeft.addControl(panel);
+    panel.addControls([
+        new Ol.Control.ZoomToMaxExtent({title: "vue initiale"})
+    ]);
+
+    // keyboard navigation
+    var keyboardNav = new Ol.Control.KeyboardDefaults();
+    mapLeft.addControls([keyboardNav]);
+
+
+    // left map layers
+    mapLeft.addLayer(hardConfig.leftCompareLayer);
+
+
+    /**
+     * Right map
+     */
+    mapRight = new Ol.Map('mapRight',mapOptions);
+    mapRight.addLayer(new Ol.Layer("fake", {isBaseLayer: true, displayInLayerSwitcher: false}));
+
+    mapRight.addControls([
+        new Ol.Control.Navigation({
+            mouseWheelOptions: {
+                cumulative: false,
+                interval: 100
+            }
+        }),
+        new Ol.Control.ScaleLine(),
+        new Ol.Control.LoadingPanel()
+    ]);
+    
+    // right map layers
+    mapRight.addLayer(hardConfig.rightCompareLayer);
+
+
+
+    /**
+     * Overlay on both maps
+     */
+    mapLeft.addLayers(hardConfig.leftOverlay); 
+    mapRight.addLayers(hardConfig.rightOverlay);
+    markGeolocLeft = new Ol.Layer.Markers("geocodage left");
+    
+    mapLeft.addLayers([markGeolocLeft]); 
+    markGeolocRight = new Ol.Layer.Markers("geocodage right");
+    mapRight.addLayers([markGeolocRight]);
+
+    // button for overlay display toggle
+    btLayerOverlayFn = function() {
+        if (this.active) {
+            for (var i=0,l=hardConfig.leftOverlay.length;i<l;i+=1) {
+                hardConfig.leftOverlay[i].setVisibility(false);
+            }
+            for (var j=0;j<hardConfig.rightOverlay.length;j+=1) {
+                hardConfig.rightOverlay[j].setVisibility(false);
+            }
+            this.deactivate();
+        } else {
+            for (var k=0;k<hardConfig.leftOverlay.length;k+=1) {
+                hardConfig.leftOverlay[k].setVisibility(true);
+            }
+            for (var m=0;m<hardConfig.rightOverlay.length;m+=1) {
+                hardConfig.rightOverlay[m].setVisibility(true);
+            }
+            this.activate();
+        }
+    };
+    
+    // geocodage via IGN
+    function openLs(text) {
+        try {
+            var q = text.trim();
+            var qa = q.split(",");
+            if (q!=="") {
+                var countryCode ="ALL";
+                var freeFormAddress ="";
+                if (qa.length>1) {
+                    // address and municipality separated by a comma
+                    var address = qa.slice(0,qa.length-1).join(" ").trim();
+                    var municipality = qa[qa.length-1].trim();
+                    countryCode = "StreetAddress";
+                    freeFormAddress = address + " " + municipality;
+                } else {
+                    // municipality
+                    //~ countryCode="PositionOfInterest";
+                    countryCode = "StreetAddress";
+                    freeFormAddress = q;
+                }
+                Ol.Request.issue({
+                    method: 'POST',
+                    headers: { "Content-Type": "application/xml" },
+                    url: hardConfig.openLSGeocodeUrl(),
+                    data:[
+                        '<?xml version="1.0" encoding="UTF-8"?>\n',
+                        '<XLS xmlns:xls="http://www.opengis.net/xls" ',
+                        'xmlns:gml="http://www.opengis.net/gml" ',
+                        'xmlns="http://www.opengis.net/xls" ',
+                        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ',
+                        'version="1.2" ',
+                        'xsi:schemaLocation="http://www.opengis.net/xls http://schemas.opengis.net/ols/1.2/olsAll.xsd">\n',
+                        '<RequestHeader/>\n',
+                        '<Request maximumResponses="',
+                        hardConfig.openLSMaxResponses,
+                        '" requestID="1" version="1.2" methodName="LocationUtilityService">\n',
+                        '<GeocodeRequest returnFreeForm="false">\n',
+                        '<Address countryCode="',
+                        countryCode,
+                        '">\n',
+                        '<freeFormAddress>',
+                        freeFormAddress,
+                        '</freeFormAddress>\n',
+                        '</Address>\n',
+                        '</GeocodeRequest>\n',
+                        '</Request>\n',
+                        '</XLS>'].join(""),
+                    failure: onOpenLSFailure,
+                    success: onOpenLSSuccess
+
+                });
+            }
+        }
+        catch(err) {
+            console.log(err.message);
+        }
+    }
+
+    var onOpenLSSuccess = function (response) {
+        try {
+            var format = new Ol.Format.XML();
+            var doc = format.read(response.responseText);
+            var results = format.getElementsByTagNameNS(doc,"*","GeocodedAddress");
+            if (results.length>0) {
+                var position = format.getElementsByTagNameNS(results[0],"*","pos")[0];
+                var loc = (position.textContent) ? position.textContent.split(" ") : position.nodeTypedValue.split(" ");
+                var ptResult = new Ol.LonLat(loc[1], loc[0]).transform(new Ol.Projection("EPSG:4326"), new Ol.Projection("EPSG:2154"));
+                var matchType = results[0].getElementsByTagName("GeocodeMatchCode")[0].getAttribute("matchType");
+                switch (matchType) {
+                    case "City": zoom = 15; break;
+                    case "Street": zoom = 17; break;
+                    case "Street enhanced": zoom = 18; break;
+                    case "Street number": zoom = 18; break;
+                }
+
+                // map move and zoom
+                if (hardConfig.restrictedExtent.containsLonLat(ptResult)) {
+                // TODO: extent check disabled, doesn't work westwards
+                    mapLeft.setCenter(ptResult, zoom);
+                    markGeolocLeft.addMarker(new Ol.Marker(ptResult));
+                    markGeolocRight.addMarker(new Ol.Marker(ptResult));
+                }
+                else {
+                    alert("La géolocalisation a échoué :\nlieu recherché hors carte");
+                }
+            }
+            else {
+                alert("La géolocalisation a échoué :\naucun résultat");
+            }
+        } catch(err) {
+            alert("la géolocalisation a échoué");
+            console.log(err);
+        }
+    };
+
+
+    var onOpenLSFailure = function (response) {
+        alert("la géolocalisation a échoué");
+    };
+
+    /**
+     * permalinks and helplink
+     */
+
+    // reading map initial extent from permalink
+    if (!mapLeft.getCenter()) {
+        var center = hardConfig.initialExtent.getCenterLonLat();
+        var zoom = hardConfig.zinit;
+        Ol.Util.applyDefaults(config, {x:center.lon, y:center.lat, z:zoom});
+        mapLeft.setCenter(new Ol.LonLat(config.x, config.y), config.z);
+        mapRight.setCenter(new Ol.LonLat(config.x, config.y), config.z);
+    }
+
+    /**
+     * Display cursor on both maps
+     */
+
+    // left map cursor display
+    var markerLeftLayer = new Ol.Layer.Markers( "markersLeft" );
+    mapLeft.addLayer(markerLeftLayer);
+ 
+    var markerLeft = new Ol.Marker(hardConfig.initialExtent.getCenterLonLat(),
+        new Ol.Icon('dual/img/crosshair-f.png',new Ol.Size(24,24), new Ol.Pixel(-12,-12))
+    );
+    markerLeftLayer.addMarker(markerLeft);
+
+    // right map cursor display
+    var markersRightLayer = new Ol.Layer.Markers( "markersRight" );
+    mapRight.addLayer(markersRightLayer);
+    var markerRight = new Ol.Marker(hardConfig.initialExtent.getCenterLonLat(),
+        new Ol.Icon('dual/img/crosshair-f.png',new Ol.Size(24,24), new Ol.Pixel(-12,-12))
+    );
+    markersRightLayer.addMarker(markerRight);
+    
+    // gets left cursor position and places marker on right map
+    mapLeft.events.register("mousemove", mapLeft, function(e) {
+        e.preventDefault();
+        var pixel = e.xy
+        if (pixel == null) {
+            pixel = new OpenLayers.Pixel(e.changedTouches[e.changedTouches.length - 1].pageX, e.changedTouches[e.changedTouches.length - 1].pageY);
+        }
+        var position = mapLeft.getLonLatFromPixel(pixel);
+        markerLeft.display(true);
+        markerRight.display(true);
+        markerLeft.moveTo(mapLeft.getLayerPxFromLonLat(position));
+        markerRight.moveTo(mapRight.getLayerPxFromLonLat(position));
+    });
+
+    // gets right cursor position and places marker on left view
+    mapRight.events.register("mousemove", mapRight, function(e) { 
+        e.preventDefault(); 
+        var pixel = e.xy
+        if (pixel == null) {
+            var size = mapLeft.getSize();
+            var width = size.w/2;
+            pixel = new OpenLayers.Pixel(e.changedTouches[e.changedTouches.length - 1].pageX-width, e.changedTouches[e.changedTouches.length - 1].pageY);
+        }  
+        var position = mapRight.getLonLatFromPixel(pixel);
+        markerRight.display(true);
+        markerLeft.display(true);
+        markerLeft.moveTo(mapLeft.getLayerPxFromLonLat(position));
+        markerRight.moveTo(mapRight.getLayerPxFromLonLat(position));
+    });
+    
+    /**
+     * Keep maps on the same extent
+     */
+    var mapLeftCenter, mapRightCenter, mapLeftZoom, mapRightZoom;
+    var mapRightUpdating = false;
+    var syncRightMove = function(e) {
+        if(!mapRightUpdating){
+            mapLeftCenter = this.getCenter();
+            mapLeftZoom = this.getZoom();
+            mapRightUpdating = true;
+            mapRight.panTo(mapLeftCenter);
+            mapRight.zoomTo(mapLeftZoom);
+            mapRight.panTo(mapLeftCenter); // restrictedExtent needs that
+            mapRightUpdating = false;
+        }
+    };
+    var syncLeftMove = function(e) {
+        if(!mapRightUpdating){
+            mapRightCenter = this.getCenter();
+            mapRightZoom = this.getZoom();
+            mapRightUpdating = true;
+            mapLeft.panTo(mapRightCenter);
+            mapLeft.zoomTo(mapRightZoom);
+            mapLeft.panTo(mapRightCenter); // restrictedExtent needs that
+            mapRightUpdating = false;
+        }
+    };
+    mapLeft.events.register("moveend", mapLeft, syncRightMove);
+    mapRight.events.register("moveend", mapRight, syncLeftMove);
+	  
+    
+    // Définition d'un zoom max
+    var zoomEnd = function (e) {
+        mapRightUpdating = true;
+        var x = this.getZoom();
+        if( x < 13)
+        {   
+            this.zoomTo(13);
+        };
+        mapRightUpdating = false;
+       
+    };
+    mapRight.events.register('zoomend', this, zoomEnd);
+    mapLeft.events.register('zoomend', this, zoomEnd);  
+    
+}
+//]]>
+    </script>
+        <style type="text/css">
+html,body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: Verdana, sans-serif;
+    font-size: 1em;
+    color: #333333;
+    background-color: #ffffff;
+    overflow:hidden;
+}
+
+/**
+ * layout
+ */
+
+#banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 0;
+    font-size: small;
+    text-shadow: 0 -1px 1px #000000;
+    border-top: 1px solid #333333;
+    border-bottom: 1px solid #333333;
+    z-index: 3000;
+    color: #ffffff;
+    background-color: #3c3c3c;
+    background-image: -webkit-linear-gradient(#3c3c3c, #111111);
+    background-image: -moz-linear-gradient(#3c3c3c, #111111);
+    background-image: -ms-linear-gradient(#3c3c3c, #111111);
+    background-image: -o-linear-gradient(#3c3c3c, #111111);
+    background-image: linear-gradient(#3c3c3c, #111111);
+}
+#banner h1 {
+    text-align: left;
+    font-size: medium;
+    margin: 0;
+    padding: 0.4em;
+    white-space:nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#banner a {
+    float: right;
+    padding: 0.4em;
+    font-weight: bold;
+    line-height: 2em;
+    text-decoration: none;
+    white-space:nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-left: 1px solid #000000;
+    color: #ffffff;
+    background-color: #444444;
+    background-image: -webkit-linear-gradient(#FFFFFF, #444444 3%, #2d2d2d);
+    background-image: -moz-linear-gradient(#FFFFFF, #444444 3%, #2d2d2d);
+    background-image: -ms-linear-gradient(#FFFFFF, #444444 3%, #2d2d2d);
+    background-image: -o-linear-gradient(#FFFFFF, #444444 3%, #2d2d2d);
+    background-image: linear-gradient(#FFFFFF, #444444 3%, #2d2d2d);
+}
+#banner img {
+    height: 2em;
+}
+#banner a:hover,a.selected {
+    color: #ffffff !important;
+    background-color: #ffffff !important;
+    background-image: -webkit-linear-gradient(#FFFFFF, #444444 3%, #FFFFFF) !important;
+    background-image: -moz-linear-gradient(#FFFFFF, #444444 3%, #FFFFFF) !important;
+    background-image: -ms-linear-gradient(#FFFFFF, #444444 3%, #FFFFFF) !important;
+    background-image: -o-linear-gradient(#FFFFFF, #444444 3%, #FFFFFF) !important;
+    background-image: linear-gradient(#FFFFFF, #444444 3%, #FFFFFF) !important;
+}
+#banner form {
+    float: right;
+    margin: 0px;
+    padding: 0.5em 1em 0.5em 1em;
+}
+#banner form input {
+    color: #333333;
+    margin: 0px
+    height: 1.2em;
+    font-size: small;
+}
+
+#logo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 20px;
+}
+
+/* pages incluses */
+
+.popupFrame {
+    display: none;
+    position: absolute;
+    top: 2em;
+    right: 0;
+    margin-left: 80px;
+    max-width: 50em;
+    padding: 1.5em 1em 1em 1em;
+    font-size: x-small;
+    color: #333333;
+    background-color: #fff9e5;
+    box-shadow: 0 0 4px #333333;
+    z-index: 1000;
+}
+.popupFrame h2 {
+    padding: 0px;
+    margin-bottom: 3px;
+}
+.popupFrame a.bt {
+    padding: 0.2em 1em 0.2em 1em;
+    font-weight: bold;
+    color: #ffffff;
+    background-color: #333333;
+    -webkit-border-radius: 4px;
+    -moz-border-radius: 4px;
+    border-radius: 4px;
+    -khtml-border-radius: 4px;
+}
+
+.popupFrame table {
+    border-collapse:collapse;
+}
+.popupFrame table td {
+    padding: 0.2em;
+    border-bottom: 1px dotted #999999;
+}
+.popupFrame p {
+    margin: 0em;
+    padding: 0.5em;
+    text-align: left;
+    text-align: justify;
+}
+.popupFrame p.pcenter {
+    text-align: center;
+}
+.popupFrame .ico {
+    width: 1.2em;
+    height: 1.2em;
+    border: 2px solid #333333;
+    -webkit-border-radius: 4px;
+    -moz-border-radius: 4px;
+    border-radius: 4px;
+    -khtml-border-radius: 4px;
+}
+
+
+
+/* disposition des cartes */
+
+#mapLayout {
+    width: 100%;
+    height: 100%;
+    border-collapse: collapse;
+}
+#mapLayout td {
+    width: 50%;
+	padding: 0;
+	text-align: left;
+	vertical-align: top;
+}
+.mapFrameInner {
+	position: absolute;
+	width: 50%;
+	height: 100%;
+}
+.mapFrameInner.left {
+	border-right: 1px solid #ffffff;
+}
+.mapFrameInner.right {
+	border-left: 1px solid #ffffff;
+}
+.olMap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background-color: #ffffff;
+}
+
+
+/**
+ * maps
+ */
+ 
+.btLayerOverlayItemInactive {
+    background: url("dual/img/label.png") !important;
+}
+.btLayerOverlayItemActive {
+    background: url("dual/img/label_a.png") !important;
+}
+.olControlScaleLineTop,
+.olControlScaleLineBottom {
+    color: #ffffcc;
+    border-color: #ffffcc !important;
+}
+.olControlOverviewMapElement {
+    background-color: #333333 !important;
+    border-top: 1px solid #333333;
+    border-left: 1px solid #333333;
+    border-top-left-radius: 4px;
+    -khtml-border-top-left-radius: 4px;
+    -khtml-border-top-left-radius: 4px;
+    -webkit-border-top-left-radius: 4px;
+    box-shadow: 0 0 4px #333333;
+    filter:progid:DXImageTransform.Microsoft.Shadow(color='#333333', Direction=180, Strength=3);
+}
+.olLayerGrid .olTileImage {
+    -webkit-transition: opacity 0.05s linear;
+    -moz-transition: opacity 0.05s linear;
+    -o-transition: opacity 0.05s linear;
+    transition: opacity 0.05s linear;
+}
+.dateInfo {
+	position: absolute;
+	top: 0;
+	right: 0;
+	margin-top: 48px;
+	margin-right: 10px;
+	padding: 13px;
+	background-color: #333333 !important;
+	background-repeat: no-repeat;
+	background-position: center center;
+	border: 2px solid #333333;
+	-webkit-border-radius: 8px;
+	-moz-border-radius: 8px;
+	border-radius: 8px;
+	-khtml-border-radius: 8px;
+	box-shadow: 0px 0px 6px #ffffff;
+	opacity: 1;
+	width: 35px;
+	height: 15px;
+	font-family: arial, verdana;
+	font-weight: bold;
+	text-align: center;
+	color: #ffffff;
+}
+.mentionInfo {
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	padding: 13px;
+	background-repeat: no-repeat;
+	background-position: center center;
+	opacity: 1;
+	font-family: arial, verdana;
+	text-align: center;
+	color: #000000;
+	font-weight: bold;
+    font-style: italic;
+    font-size: 10px;
+    text-decoration: underline;
+}
+        </style>
+    </head>
+    <body>
+
+        <div id="banner">
+            <h1 id="title">Les gravières de la Vilaine</h1>
+        </div>
+
+        <!-- map -->
+        <table id="mapLayout">
+            <tr>
+                <td>
+                    <div class="mapFrameInner left">
+                        <div id="mapLeft"></div>
+						<div class="dateInfo">1950</div>
+						<div class="mentionInfo">Orthophotographie ancienne de Bretagne – IGN</div>
+                    </div>
+                </td>
+                <td>
+                    <div class="mapFrameInner right">
+                        <div id="mapRight"></div>
+						<div class="dateInfo">2014</div>
+						<div class="mentionInfo">Orthophotographie 2014 - Mégalis Bretagne et Collectivités Territoriales Bretonnes</div>
+                    </div>
+                    
+                </td>
+            </tr>
+        </table>
+
+        <script type="text/javascript">init();</script>
+    </body>
+</html>
+
